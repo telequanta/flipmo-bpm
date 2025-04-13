@@ -4,9 +4,9 @@ let dataArray;
 let peakTimes = [];
 let bpmDisplay = document.getElementById('bpm');
 let bpmTimer;
-const PEAK_THRESHOLD = 0.005; // LOWERED sensitivity (was 0.02)
-const MIN_PEAK_INTERVAL = 0.4; // 150 BPM upper limit
-const MAX_PEAK_INTERVAL = 0.6; // 100 BPM lower limit
+const PEAK_THRESHOLD = 10; // MUCH LOWER (frequency energy value)
+const MIN_PEAK_INTERVAL = 0.4; // Minimum 0.4s
+const MAX_PEAK_INTERVAL = 0.6; // Maximum 0.6s
 const EXPECTED_BPM_RANGE = [100, 135];
 let lastPeakTime = 0;
 
@@ -15,32 +15,24 @@ async function startMic() {
   audioContext = new (window.AudioContext || window.webkitAudioContext)();
   source = audioContext.createMediaStreamSource(stream);
 
-  // Bandpass filter shifted LOWER to focus on kicks/claps
-  bandpassFilter = audioContext.createBiquadFilter();
-  bandpassFilter.type = 'bandpass';
-  bandpassFilter.frequency.value = 200; // Center on 200Hz
-  bandpassFilter.Q.value = 0.7; // Wider to catch some snares too
-
   analyser = audioContext.createAnalyser();
   analyser.fftSize = 1024;
   dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-  source.connect(bandpassFilter);
-  bandpassFilter.connect(analyser);
+  source.connect(analyser);
 
   detectBeats();
-  bpmTimer = setInterval(updateBPMDisplay, 2000); // Update display every 2 sec
+  bpmTimer = setInterval(updateBPMDisplay, 2000);
 }
 
 function detectBeats() {
-  analyser.getByteTimeDomainData(dataArray);
+  analyser.getByteFrequencyData(dataArray); // **use frequency data now**
 
+  // Focus only on low-mid frequencies: bins 5–20 (roughly 100Hz–400Hz)
   let energy = 0;
-  for (let i = 0; i < dataArray.length; i++) {
-    let val = (dataArray[i] - 128) / 128;
-    energy += val * val;
+  for (let i = 5; i < 20; i++) {
+    energy += dataArray[i];
   }
-  energy /= dataArray.length;
 
   const currentTime = audioContext.currentTime;
 
@@ -51,7 +43,7 @@ function detectBeats() {
       peakTimes.push(currentTime);
       lastPeakTime = currentTime;
 
-      // Keep the last ~40 beats (10 bars)
+      // Keep only last 40 beats
       if (peakTimes.length > 40) {
         peakTimes.shift();
       }
@@ -63,7 +55,7 @@ function detectBeats() {
 
 function updateBPMDisplay() {
   if (peakTimes.length < 4) {
-    bpmDisplay.textContent = "-- BPM"; // Not enough data yet
+    bpmDisplay.textContent = "-- BPM";
     return;
   }
 
@@ -78,7 +70,7 @@ function updateBPMDisplay() {
   if (bpm >= EXPECTED_BPM_RANGE[0] && bpm <= EXPECTED_BPM_RANGE[1]) {
     bpmDisplay.textContent = bpm.toFixed(1) + " BPM";
   } else {
-    bpmDisplay.textContent = "-- BPM"; // Out of expected range
+    bpmDisplay.textContent = "-- BPM";
   }
 }
 
