@@ -67,8 +67,8 @@ async function startMic() {
 
     filter = audioContext.createBiquadFilter();
     filter.type = "bandpass";
-    filter.frequency.value = 800; // Center frequency for kicks/snare
-    filter.Q.value = 1; // Wider band to catch more beats
+    filter.frequency.value = 800;
+    filter.Q.value = 1;
 
     analyser = audioContext.createAnalyser();
     analyser.fftSize = 512;
@@ -105,21 +105,29 @@ function detectBeats() {
 
       if (bpm >= 60 && bpm <= 180) {
         if (bpm < 100) {
-          bpm *= 2; // Auto-correct half BPM
+          bpm *= 2;
         }
 
-        // Add to bpmHistory and limit to 10 entries
+        // Trust filter: Only accept bpm close to existing average
+        if (bpmHistory.length > 0) {
+          const currentAvg = bpmHistory.reduce((sum, val) => sum + val, 0) / bpmHistory.length;
+          const allowedVariance = currentAvg * 0.08; // 8% variance allowed
+
+          if (Math.abs(bpm - currentAvg) > allowedVariance) {
+            bpm = currentAvg; // Ignore weird bpm
+          }
+        }
+
         bpmHistory.push(bpm);
         if (bpmHistory.length > 10) {
           bpmHistory.shift();
         }
 
-        // Calculate moving average
+        // Smooth average display
         const avgBpm = bpmHistory.reduce((sum, val) => sum + val, 0) / bpmHistory.length;
         bpmDisplay.textContent = avgBpm.toFixed(1) + " BPM";
       }
 
-      // Keep only the last 3 beats for faster updates
       if (beatTimes.length > 3) beatTimes.shift();
     }
   }
@@ -137,4 +145,3 @@ function resetBPM() {
 
 </body>
 </html>
-
