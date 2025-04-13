@@ -2,103 +2,120 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Flipmo BPM Tool</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FLIPMO BPM Tool</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      background: black;
+      color: #00FF00;
+      font-family: 'Orbitron', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      text-align: center;
+    }
+    h1 {
+      font-size: 2.5em;
+      text-shadow: 0 0 10px #00FF00, 0 0 20px #00FF00;
+      margin-bottom: 30px;
+    }
+    #bpm {
+      font-size: 5em;
+      text-shadow: 0 0 15px #00FF00, 0 0 30px #00FF00;
+      margin: 20px 0;
+    }
+    button {
+      font-family: 'Orbitron', sans-serif;
+      background: none;
+      color: #00FF00;
+      border: 2px solid #00FF00;
+      padding: 10px 20px;
+      margin: 10px;
+      font-size: 1.2em;
+      cursor: pointer;
+      text-shadow: 0 0 8px #00FF00;
+    }
+    button:hover {
+      background: #00FF00;
+      color: black;
+    }
+  </style>
 </head>
 <body>
-  <h1>Flipmo BPM Tool</h1>
-  <input type="file" id="audioFile" accept="audio/*">
-  <div id="bpm">BPM: --</div>
 
-  <script>
-    let audioContext;
-    let source;
-    let analyser;
-    let dataArray;
-    let bufferLength;
-    let lastPeakTime = 0;
-    let peakTimes = [];
-    let bpmHistory = [];
-    const rollingAverageSize = 12;
-    const minBPM = 80;
-    const maxBPM = 160;
-    const energyThreshold = 0.2;
-    const minPeakInterval = 0.3; // seconds
+<h1>FLIPMO BPM Tool</h1>
+<div id="bpm">-- BPM</div>
+<button onclick="startMic()">🎤 Start Mic</button>
+<button onclick="resetBPM()">🔁 Reset</button>
 
-    document.getElementById('audioFile').addEventListener('change', function(e) {
-      if (audioContext) {
-        audioContext.close();
-      }
+<script>
+let audioContext, analyser, source, bandpassFilter;
+let dataArray;
+let lastPeakTime = 0;
+let bpmEstimates = [];
+let bpmDisplay = document.getElementById('bpm');
 
-      const file = e.target.files[0];
-      const reader = new FileReader();
-      reader.onload = function(event) {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        audioContext.decodeAudioData(event.target.result, function(buffer) {
-          source = audioContext.createBufferSource();
-          source.buffer = buffer;
+async function startMic() {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  source = audioContext.createMediaStreamSource(stream);
 
-          const bandpass = audioContext.createBiquadFilter();
-          bandpass.type = "bandpass";
-          bandpass.frequency.value = 1000; // center frequency
-          bandpass.Q.value = 1; // width
+  // Create a bandpass filter for midrange detection
+  bandpassFilter = audioContext.createBiquadFilter();
+  bandpassFilter.type = 'bandpass';
+  bandpassFilter.frequency.value = 1000; // Center at 1000 Hz
+  bandpassFilter.Q.value = 1; // Bandwidth
 
-          analyser = audioContext.createAnalyser();
-          analyser.fftSize = 2048;
-          bufferLength = analyser.frequencyBinCount;
-          dataArray = new Uint8Array(bufferLength);
+  analyser = audioContext.createAnalyser();
+  analyser.fftSize = 1024;
+  dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-          source.connect(bandpass);
-          bandpass.connect(analyser);
-          analyser.connect(audioContext.destination);
+  source.connect(bandpassFilter);
+  bandpassFilter.connect(analyser);
 
-          source.start();
-          detectBeats();
-        });
-      };
-      reader.readAsArrayBuffer(file);
-    });
+  detectBeats();
+}
 
-    function detectBeats() {
-      setInterval(() => {
-        analyser.getByteTimeDomainData(dataArray);
+function detectBeats() {
+  analyser.getByteTimeDomainData(dataArray);
 
-        let energy = 0;
-        for (let i = 0; i < bufferLength; i++) {
-          let val = (dataArray[i] - 128) / 128;
-          energy += val * val;
-        }
-        energy /= bufferLength;
+  let energy = 0;
+  for (let i = 0; i < dataArray.length; i++) {
+    let val = (dataArray[i] - 128) / 128;
+    energy += val * val;
+  }
+  energy /= dataArray.length;
 
-        let currentTime = audioContext.currentTime;
-        if (energy > energyThreshold && (currentTime - lastPeakTime) > minPeakInterval) {
-          lastPeakTime = currentTime;
-          peakTimes.push(currentTime);
+  const threshold = 0.02; // Energy threshold
+  const currentTime = audioContext.currentTime;
 
-          if (peakTimes.length > 2) {
-            const intervals = [];
-            for (let i = 1; i < peakTimes.length; i++) {
-              intervals.push(peakTimes[i] - peakTimes[i - 1]);
-            }
-            const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-            let bpm = 60 / avgInterval;
+  if (energy > threshold && (currentTime - lastPeakTime) > 0.3) {
+    let interval = currentTime - lastPeakTime;
+    let bpm = 60 / interval;
 
-            if (bpm >= minBPM && bpm <= maxBPM) {
-              bpmHistory.push(bpm);
-              if (bpmHistory.length > rollingAverageSize) {
-                bpmHistory.shift();
-              }
-              const avgBPM = bpmHistory.reduce((a, b) => a + b, 0) / bpmHistory.length;
-              updateBPMDisplay(avgBPM.toFixed(1));
-            }
-          }
-        }
-      }, 100); // Analyze every 100 ms
+    if (bpm > 80 && bpm < 160) { // Accept only reasonable BPM
+      bpmEstimates.push(bpm);
+      if (bpmEstimates.length > 15) bpmEstimates.shift();
+
+      let avgBPM = bpmEstimates.reduce((a, b) => a + b, 0) / bpmEstimates.length;
+      bpmDisplay.textContent = avgBPM.toFixed(1) + " BPM";
     }
 
-    function updateBPMDisplay(bpm) {
-      document.getElementById('bpm').innerText = `BPM: ${bpm}`;
-    }
-  </script>
+    lastPeakTime = currentTime;
+  }
+
+  requestAnimationFrame(detectBeats);
+}
+
+function resetBPM() {
+  bpmEstimates = [];
+  bpmDisplay.textContent = "-- BPM";
+}
+</script>
+
 </body>
 </html>
-
