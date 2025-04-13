@@ -1,67 +1,13 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FLIPMO BPM Tool</title>
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap" rel="stylesheet">
-  <style>
-    body {
-      margin: 0;
-      background: black;
-      color: #00FF00;
-      font-family: 'Orbitron', sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      text-align: center;
-    }
-    h1 {
-      font-size: 2.5em;
-      text-shadow: 0 0 10px #00FF00, 0 0 20px #00FF00;
-      margin-bottom: 30px;
-    }
-    #bpm {
-      font-size: 5em;
-      text-shadow: 0 0 15px #00FF00, 0 0 30px #00FF00;
-      margin: 20px 0;
-    }
-    button {
-      font-family: 'Orbitron', sans-serif;
-      background: none;
-      color: #00FF00;
-      border: 2px solid #00FF00;
-      padding: 10px 20px;
-      margin: 10px;
-      font-size: 1.2em;
-      cursor: pointer;
-      text-shadow: 0 0 8px #00FF00;
-    }
-    button:hover {
-      background: #00FF00;
-      color: black;
-    }
-  </style>
-</head>
-<body>
-
-<h1>FLIPMO BPM Tool</h1>
-<div id="bpm">-- BPM</div>
-<button onclick="startMic()">🎤 Start Mic</button>
-<button onclick="resetBPM()">🔁 Reset</button>
-
 <script>
 let audioContext, analyser, source, bandpassFilter;
 let dataArray;
 let peakTimes = [];
 let bpmDisplay = document.getElementById('bpm');
 let bpmTimer;
-const PEAK_THRESHOLD = 0.02; // Sensitivity
-const MIN_PEAK_INTERVAL = 0.4; // Minimum beat interval in seconds (~150 BPM max)
-const MAX_PEAK_INTERVAL = 0.6; // Maximum beat interval in seconds (~100 BPM min)
-const EXPECTED_BPM_RANGE = [100, 135]; // For house music focus
+const PEAK_THRESHOLD = 0.005; // LOWERED sensitivity (was 0.02)
+const MIN_PEAK_INTERVAL = 0.4; // 150 BPM upper limit
+const MAX_PEAK_INTERVAL = 0.6; // 100 BPM lower limit
+const EXPECTED_BPM_RANGE = [100, 135];
 let lastPeakTime = 0;
 
 async function startMic() {
@@ -69,11 +15,11 @@ async function startMic() {
   audioContext = new (window.AudioContext || window.webkitAudioContext)();
   source = audioContext.createMediaStreamSource(stream);
 
-  // Bandpass focused lower (kick/snare range)
+  // Bandpass filter shifted LOWER to focus on kicks/claps
   bandpassFilter = audioContext.createBiquadFilter();
   bandpassFilter.type = 'bandpass';
-  bandpassFilter.frequency.value = 500; // Center on 500Hz
-  bandpassFilter.Q.value = 0.7; // Wider bandwidth
+  bandpassFilter.frequency.value = 200; // Center on 200Hz
+  bandpassFilter.Q.value = 0.7; // Wider to catch some snares too
 
   analyser = audioContext.createAnalyser();
   analyser.fftSize = 1024;
@@ -142,6 +88,3 @@ function resetBPM() {
   clearInterval(bpmTimer);
 }
 </script>
-
-</body>
-</html>
