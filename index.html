@@ -1,66 +1,12 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FLIPMO BPM Tool</title>
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap" rel="stylesheet">
-  <style>
-    body {
-      margin: 0;
-      background: black;
-      color: #00FF00;
-      font-family: 'Orbitron', sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      text-align: center;
-    }
-    h1 {
-      font-size: 2.5em;
-      text-shadow: 0 0 10px #00FF00, 0 0 20px #00FF00;
-      margin-bottom: 30px;
-    }
-    #bpm {
-      font-size: 5em;
-      text-shadow: 0 0 15px #00FF00, 0 0 30px #00FF00;
-      margin: 20px 0;
-    }
-    button {
-      font-family: 'Orbitron', sans-serif;
-      background: none;
-      color: #00FF00;
-      border: 2px solid #00FF00;
-      padding: 10px 20px;
-      margin: 10px;
-      font-size: 1.2em;
-      cursor: pointer;
-      text-shadow: 0 0 8px #00FF00;
-    }
-    button:hover {
-      background: #00FF00;
-      color: black;
-    }
-  </style>
-</head>
-<body>
-
-<h1>FLIPMO BPM Tool</h1>
-<div id="bpm">-- BPM</div>
-<button onclick="startMic()">🎤 Start Mic</button>
-<button onclick="resetBPM()">🔁 Reset</button>
-
 <script>
 let audioContext, analyser, source;
 let dataArray;
 let peakTimes = [];
 let bpmDisplay = document.getElementById('bpm');
 let bpmTimer;
-const PEAK_THRESHOLD = 10; // Sensitivity for frequency data
-const MIN_PEAK_INTERVAL = 0.4; // Minimum ~150 BPM
-const MAX_PEAK_INTERVAL = 0.6; // Maximum ~100 BPM
+const PEAK_THRESHOLD = 5; // Lowered threshold for quieter peaks
+const MIN_PEAK_INTERVAL = 0.35; // Accept faster beats (~170 BPM max)
+const MAX_PEAK_INTERVAL = 0.75; // Accept slower beats (~80 BPM min)
 const EXPECTED_BPM_RANGE = [100, 135];
 let lastPeakTime = 0;
 
@@ -80,11 +26,11 @@ async function startMic() {
 }
 
 function detectBeats() {
-  analyser.getByteFrequencyData(dataArray); // Use frequency domain now
+  analyser.getByteFrequencyData(dataArray); // Analyze frequency domain
 
-  // Focus on low-mid frequencies: bins 5–20 (roughly 100Hz–400Hz)
+  // Focus on midrange: bins 10–40 (~300Hz–800Hz range)
   let energy = 0;
-  for (let i = 5; i < 20; i++) {
+  for (let i = 10; i < 40; i++) {
     energy += dataArray[i];
   }
 
@@ -134,6 +80,3 @@ function resetBPM() {
   clearInterval(bpmTimer);
 }
 </script>
-
-</body>
-</html>
