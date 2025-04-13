@@ -78,7 +78,7 @@ function detectBeats() {
   analyser.getByteFrequencyData(dataArray);
   let energy = dataArray.reduce((sum, val) => sum + val, 0) / dataArray.length;
 
-  if (energy > 180) { // basic threshold for a "beat"
+  if (energy > 40) { // basic threshold for a "beat"
     let now = audioContext.currentTime;
     if (now - lastBeatTime > 0.3) { // debounce rapid hits
       let interval = now - lastBeatTime;
