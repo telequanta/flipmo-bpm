@@ -57,6 +57,7 @@ let audioContext, analyser, filter, dataArray, source;
 let lastEnergy = 0;
 let beatTimes = [];
 let bpmDisplay = document.getElementById('bpm');
+let bpmHistory = [];
 
 async function startMic() {
   try {
@@ -90,7 +91,6 @@ function detectBeats() {
   let now = audioContext.currentTime;
   let energyChange = energy - lastEnergy;
 
-  // Detect very slight energy spikes (faster detection)
   if (energyChange > 5 && (beatTimes.length === 0 || now - beatTimes[beatTimes.length - 1] > 0.2)) {
     beatTimes.push(now);
 
@@ -105,12 +105,21 @@ function detectBeats() {
 
       if (bpm >= 60 && bpm <= 180) {
         if (bpm < 100) {
-          bpm *= 2; // Auto-correct slow half BPM
+          bpm *= 2; // Auto-correct half BPM
         }
-        bpmDisplay.textContent = bpm.toFixed(1) + " BPM";
+
+        // Add to bpmHistory and limit to 10 entries
+        bpmHistory.push(bpm);
+        if (bpmHistory.length > 10) {
+          bpmHistory.shift();
+        }
+
+        // Calculate moving average
+        const avgBpm = bpmHistory.reduce((sum, val) => sum + val, 0) / bpmHistory.length;
+        bpmDisplay.textContent = avgBpm.toFixed(1) + " BPM";
       }
 
-      // Keep only the last 3 beats for smoother rolling updates
+      // Keep only the last 3 beats for faster updates
       if (beatTimes.length > 3) beatTimes.shift();
     }
   }
@@ -121,9 +130,11 @@ function detectBeats() {
 
 function resetBPM() {
   beatTimes = [];
+  bpmHistory = [];
   bpmDisplay.textContent = "-- BPM";
 }
 </script>
 
 </body>
 </html>
+
