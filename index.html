@@ -58,9 +58,10 @@ let dataArray;
 let peakTimes = [];
 let bpmDisplay = document.getElementById('bpm');
 let bpmTimer;
-const PEAK_THRESHOLD = 0.015; // Adjust for sensitivity
-const MIN_PEAK_INTERVAL = 0.3; // seconds (to avoid double-hits)
-const EXPECTED_BPM_RANGE = [80, 160];
+const PEAK_THRESHOLD = 0.02; // Sensitivity
+const MIN_PEAK_INTERVAL = 0.4; // Minimum beat interval in seconds (~150 BPM max)
+const MAX_PEAK_INTERVAL = 0.6; // Maximum beat interval in seconds (~100 BPM min)
+const EXPECTED_BPM_RANGE = [100, 135]; // For house music focus
 let lastPeakTime = 0;
 
 async function startMic() {
@@ -68,10 +69,11 @@ async function startMic() {
   audioContext = new (window.AudioContext || window.webkitAudioContext)();
   source = audioContext.createMediaStreamSource(stream);
 
+  // Bandpass focused lower (kick/snare range)
   bandpassFilter = audioContext.createBiquadFilter();
   bandpassFilter.type = 'bandpass';
-  bandpassFilter.frequency.value = 1000; // Midrange focus
-  bandpassFilter.Q.value = 1;
+  bandpassFilter.frequency.value = 500; // Center on 500Hz
+  bandpassFilter.Q.value = 0.7; // Wider bandwidth
 
   analyser = audioContext.createAnalyser();
   analyser.fftSize = 1024;
@@ -96,13 +98,17 @@ function detectBeats() {
 
   const currentTime = audioContext.currentTime;
 
-  if (energy > PEAK_THRESHOLD && (currentTime - lastPeakTime) > MIN_PEAK_INTERVAL) {
-    peakTimes.push(currentTime);
-    lastPeakTime = currentTime;
+  if (energy > PEAK_THRESHOLD) {
+    let interval = currentTime - lastPeakTime;
 
-    // Keep only the last ~40 beats (10 bars if 4/4 time)
-    if (peakTimes.length > 40) {
-      peakTimes.shift();
+    if (interval > MIN_PEAK_INTERVAL && interval < MAX_PEAK_INTERVAL) {
+      peakTimes.push(currentTime);
+      lastPeakTime = currentTime;
+
+      // Keep the last ~40 beats (10 bars)
+      if (peakTimes.length > 40) {
+        peakTimes.shift();
+      }
     }
   }
 
@@ -111,7 +117,7 @@ function detectBeats() {
 
 function updateBPMDisplay() {
   if (peakTimes.length < 4) {
-    bpmDisplay.textContent = "-- BPM"; // not enough data yet
+    bpmDisplay.textContent = "-- BPM"; // Not enough data yet
     return;
   }
 
@@ -126,7 +132,7 @@ function updateBPMDisplay() {
   if (bpm >= EXPECTED_BPM_RANGE[0] && bpm <= EXPECTED_BPM_RANGE[1]) {
     bpmDisplay.textContent = bpm.toFixed(1) + " BPM";
   } else {
-    bpmDisplay.textContent = "-- BPM"; // out of expected range
+    bpmDisplay.textContent = "-- BPM"; // Out of expected range
   }
 }
 
