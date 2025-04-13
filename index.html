@@ -104,9 +104,13 @@ function detectBeats() {
       }
 
       const avgInterval = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
-      const bpm = 60 / avgInterval;
+      let bpm = 60 / avgInterval;
 
+      // Auto-correct half BPM readings
       if (bpm >= 60 && bpm <= 180) {
+        if (bpm < 100) {
+          bpm = bpm * 2; // Double BPM if too low
+        }
         bpmDisplay.textContent = bpm.toFixed(1) + " BPM";
       }
 
@@ -127,3 +131,4 @@ function resetBPM() {
 
 </body>
 </html>
+
