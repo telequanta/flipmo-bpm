@@ -53,7 +53,8 @@
 <button onclick="resetBPM()">🔁 Reset</button>
 
 <script>
-let audioContext, analyser, dataArray, source;
+let audioContext, analyser, filter, dataArray, source;
+let lastEnergy = 0;
 let lastBeatTime = 0;
 let beatTimes = [];
 let bpmDisplay = document.getElementById('bpm');
@@ -63,10 +64,20 @@ async function startMic() {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
     source = audioContext.createMediaStreamSource(stream);
+
+    // Bandpass filter to focus on drums (kick/snare range)
+    filter = audioContext.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = 1000; // Center frequency between kick/snare
+    filter.Q.value = 1; // Width of the band
+
     analyser = audioContext.createAnalyser();
-    analyser.fftSize = 1024;
+    analyser.fftSize = 512;
     dataArray = new Uint8Array(analyser.frequencyBinCount);
-    source.connect(analyser);
+
+    source.connect(filter);
+    filter.connect(analyser);
+
     detectBeats();
   } catch (err) {
     alert('Microphone access denied or unavailable.');
@@ -78,8 +89,11 @@ function detectBeats() {
   analyser.getByteFrequencyData(dataArray);
   let energy = dataArray.reduce((sum, val) => sum + val, 0) / dataArray.length;
 
-  const now = audioContext.currentTime;
-  if (energy > 40 && (now - lastBeatTime) > 0.25) {
+  let now = audioContext.currentTime;
+  let energyChange = energy - lastEnergy;
+
+  // Detect sharp spikes in energy (kick/snare hits)
+  if (energyChange > 10 && (now - lastBeatTime) > 0.25) {
     beatTimes.push(now);
     lastBeatTime = now;
 
@@ -96,11 +110,12 @@ function detectBeats() {
         bpmDisplay.textContent = bpm.toFixed(1) + " BPM";
       }
 
-      // Keep only last 4 beats for continuous updating
+      // Keep only the last 4 beats for smoothing
       if (beatTimes.length > 4) beatTimes.shift();
     }
   }
 
+  lastEnergy = energy;
   requestAnimationFrame(detectBeats);
 }
 
@@ -112,5 +127,3 @@ function resetBPM() {
 
 </body>
 </html>
-
-
