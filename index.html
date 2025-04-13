@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FLIPMO BPM Tool (Autocorrelation Version)</title>
+  <title>FLIPMO BPM Tool (Autocorrelation Boosted)</title>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap" rel="stylesheet">
   <style>
     body {
@@ -53,7 +53,7 @@
 <button onclick="resetBPM()">🔁 Reset</button>
 
 <script>
-let audioContext, analyser, source;
+let audioContext, analyser, source, gainNode;
 let bufferSize = 4096;
 let buffer = [];
 let bpmDisplay = document.getElementById('bpm');
@@ -64,10 +64,17 @@ async function startMic() {
   audioContext = new (window.AudioContext || window.webkitAudioContext)();
   source = audioContext.createMediaStreamSource(stream);
 
+  // Add Gain Node to boost microphone input
+  gainNode = audioContext.createGain();
+  gainNode.gain.value = 4.0; // Boost volume 4x 🎛️
+
   analyser = audioContext.createAnalyser();
   analyser.fftSize = bufferSize;
-  analyser.smoothingTimeConstant = 0.8; // Smoother output
-  source.connect(analyser);
+  analyser.smoothingTimeConstant = 0.8;
+
+  // Connect nodes: source -> gain -> analyser
+  source.connect(gainNode);
+  gainNode.connect(analyser);
 
   buffer = new Float32Array(analyser.fftSize);
   detectBeats();
@@ -87,7 +94,8 @@ function autoCorrelate(buf, sampleRate) {
     rms += val * val;
   }
   rms = Math.sqrt(rms / SIZE);
-  if (rms < 0.01) // volume too low
+
+  if (rms < 0.002) // 👈 LOWERED threshold (was 0.01) to accept quiet signals
     return -1;
 
   let r1 = 0, r2 = SIZE - 1, threshold = 0.2;
@@ -126,7 +134,7 @@ function autoCorrelate(buf, sampleRate) {
   if (maxpos == -1) return -1;
   let T0 = maxpos;
 
-  let bpm = sampleRate / T0 * 60; // samples to BPM
+  let bpm = sampleRate / T0 * 60;
   return bpm;
 }
 
@@ -135,7 +143,7 @@ function estimateBPM() {
 
   let bpm = autoCorrelate(buffer, audioContext.sampleRate);
 
-  if (bpm > 100 && bpm < 135) {
+  if (bpm > 90 && bpm < 140) { // Slightly wider detection range
     bpmDisplay.textContent = bpm.toFixed(1) + " BPM";
   } else {
     bpmDisplay.textContent = "-- BPM";
