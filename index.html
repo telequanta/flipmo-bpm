@@ -55,20 +55,23 @@
 <script>
 let audioContext, analyser, source, bandpassFilter;
 let dataArray;
-let lastPeakTime = 0;
-let bpmEstimates = [];
+let peakTimes = [];
 let bpmDisplay = document.getElementById('bpm');
+let bpmTimer;
+const PEAK_THRESHOLD = 0.015; // Adjust for sensitivity
+const MIN_PEAK_INTERVAL = 0.3; // seconds (to avoid double-hits)
+const EXPECTED_BPM_RANGE = [80, 160];
+let lastPeakTime = 0;
 
 async function startMic() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   audioContext = new (window.AudioContext || window.webkitAudioContext)();
   source = audioContext.createMediaStreamSource(stream);
 
-  // Create a bandpass filter for midrange detection
   bandpassFilter = audioContext.createBiquadFilter();
   bandpassFilter.type = 'bandpass';
-  bandpassFilter.frequency.value = 1000; // Center at 1000 Hz
-  bandpassFilter.Q.value = 1; // Bandwidth
+  bandpassFilter.frequency.value = 1000; // Midrange focus
+  bandpassFilter.Q.value = 1;
 
   analyser = audioContext.createAnalyser();
   analyser.fftSize = 1024;
@@ -78,6 +81,7 @@ async function startMic() {
   bandpassFilter.connect(analyser);
 
   detectBeats();
+  bpmTimer = setInterval(updateBPMDisplay, 2000); // Update display every 2 sec
 }
 
 function detectBeats() {
@@ -90,30 +94,46 @@ function detectBeats() {
   }
   energy /= dataArray.length;
 
-  const threshold = 0.02; // Energy threshold
   const currentTime = audioContext.currentTime;
 
-  if (energy > threshold && (currentTime - lastPeakTime) > 0.3) {
-    let interval = currentTime - lastPeakTime;
-    let bpm = 60 / interval;
-
-    if (bpm > 80 && bpm < 160) { // Accept only reasonable BPM
-      bpmEstimates.push(bpm);
-      if (bpmEstimates.length > 15) bpmEstimates.shift();
-
-      let avgBPM = bpmEstimates.reduce((a, b) => a + b, 0) / bpmEstimates.length;
-      bpmDisplay.textContent = avgBPM.toFixed(1) + " BPM";
-    }
-
+  if (energy > PEAK_THRESHOLD && (currentTime - lastPeakTime) > MIN_PEAK_INTERVAL) {
+    peakTimes.push(currentTime);
     lastPeakTime = currentTime;
+
+    // Keep only the last ~40 beats (10 bars if 4/4 time)
+    if (peakTimes.length > 40) {
+      peakTimes.shift();
+    }
   }
 
   requestAnimationFrame(detectBeats);
 }
 
+function updateBPMDisplay() {
+  if (peakTimes.length < 4) {
+    bpmDisplay.textContent = "-- BPM"; // not enough data yet
+    return;
+  }
+
+  let intervals = [];
+  for (let i = 1; i < peakTimes.length; i++) {
+    intervals.push(peakTimes[i] - peakTimes[i - 1]);
+  }
+
+  const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+  let bpm = 60 / avgInterval;
+
+  if (bpm >= EXPECTED_BPM_RANGE[0] && bpm <= EXPECTED_BPM_RANGE[1]) {
+    bpmDisplay.textContent = bpm.toFixed(1) + " BPM";
+  } else {
+    bpmDisplay.textContent = "-- BPM"; // out of expected range
+  }
+}
+
 function resetBPM() {
-  bpmEstimates = [];
+  peakTimes = [];
   bpmDisplay.textContent = "-- BPM";
+  clearInterval(bpmTimer);
 }
 </script>
 
