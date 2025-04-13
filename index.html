@@ -55,7 +55,6 @@
 <script>
 let audioContext, analyser, filter, dataArray, source;
 let lastEnergy = 0;
-let lastBeatTime = 0;
 let beatTimes = [];
 let bpmDisplay = document.getElementById('bpm');
 
@@ -65,11 +64,10 @@ async function startMic() {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
     source = audioContext.createMediaStreamSource(stream);
 
-    // Bandpass filter to focus on drums (kick/snare range)
     filter = audioContext.createBiquadFilter();
     filter.type = "bandpass";
-    filter.frequency.value = 1000; // Center frequency between kick/snare
-    filter.Q.value = 1; // Width of the band
+    filter.frequency.value = 800; // Center frequency for kicks/snare
+    filter.Q.value = 1; // Wider band to catch more beats
 
     analyser = audioContext.createAnalyser();
     analyser.fftSize = 512;
@@ -92,12 +90,11 @@ function detectBeats() {
   let now = audioContext.currentTime;
   let energyChange = energy - lastEnergy;
 
-  // Detect sharp spikes in energy (kick/snare hits)
-  if (energyChange > 10 && (now - lastBeatTime) > 0.25) {
+  // Detect very slight energy spikes (faster detection)
+  if (energyChange > 5 && (beatTimes.length === 0 || now - beatTimes[beatTimes.length - 1] > 0.2)) {
     beatTimes.push(now);
-    lastBeatTime = now;
 
-    if (beatTimes.length >= 4) {
+    if (beatTimes.length >= 3) {
       const intervals = [];
       for (let i = 1; i < beatTimes.length; i++) {
         intervals.push(beatTimes[i] - beatTimes[i - 1]);
@@ -106,16 +103,15 @@ function detectBeats() {
       const avgInterval = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
       let bpm = 60 / avgInterval;
 
-      // Auto-correct half BPM readings
       if (bpm >= 60 && bpm <= 180) {
         if (bpm < 100) {
-          bpm = bpm * 2; // Double BPM if too low
+          bpm *= 2; // Auto-correct slow half BPM
         }
         bpmDisplay.textContent = bpm.toFixed(1) + " BPM";
       }
 
-      // Keep only the last 4 beats for smoothing
-      if (beatTimes.length > 4) beatTimes.shift();
+      // Keep only the last 3 beats for smoother rolling updates
+      if (beatTimes.length > 3) beatTimes.shift();
     }
   }
 
@@ -131,4 +127,3 @@ function resetBPM() {
 
 </body>
 </html>
-
