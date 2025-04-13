@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FLIPMO BPM Tool</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      background: black;
+      color: #00FF00;
+      font-family: 'Orbitron', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      text-align: center;
+    }
+    h1 {
+      font-size: 2.5em;
+      text-shadow: 0 0 10px #00FF00, 0 0 20px #00FF00;
+      margin-bottom: 30px;
+    }
+    #bpm {
+      font-size: 5em;
+      text-shadow: 0 0 15px #00FF00, 0 0 30px #00FF00;
+      margin: 20px 0;
+    }
+    button {
+      font-family: 'Orbitron', sans-serif;
+      background: none;
+      color: #00FF00;
+      border: 2px solid #00FF00;
+      padding: 10px 20px;
+      margin: 10px;
+      font-size: 1.2em;
+      cursor: pointer;
+      text-shadow: 0 0 8px #00FF00;
+    }
+    button:hover {
+      background: #00FF00;
+      color: black;
+    }
+  </style>
+</head>
+<body>
+
+<h1>FLIPMO BPM Tool</h1>
+<div id="bpm">-- BPM</div>
+<button onclick="startMic()">🎤 Start Mic</button>
+<button onclick="resetBPM()">🔁 Reset</button>
+
+<script>
+let audioContext, analyser, dataArray, source;
+let lastBeatTime = 0;
+let bpmEstimates = [];
+let bpmDisplay = document.getElementById('bpm');
+
+async function startMic() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    source = audioContext.createMediaStreamSource(stream);
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 1024;
+    dataArray = new Uint8Array(analyser.frequencyBinCount);
+    source.connect(analyser);
+    detectBeats();
+  } catch (err) {
+    alert('Microphone access denied or unavailable.');
+    console.error(err);
+  }
+}
+
+function detectBeats() {
+  analyser.getByteFrequencyData(dataArray);
+  let energy = dataArray.reduce((sum, val) => sum + val, 0) / dataArray.length;
+
+  if (energy > 180) { // basic threshold for a "beat"
+    let now = audioContext.currentTime;
+    if (now - lastBeatTime > 0.3) { // debounce rapid hits
+      let interval = now - lastBeatTime;
+      let bpm = 60 / interval;
+      if (bpm > 60 && bpm < 180) { // reasonable BPM range
+        bpmEstimates.push(bpm);
+        if (bpmEstimates.length > 10) bpmEstimates.shift();
+        let avgBPM = bpmEstimates.reduce((sum, val) => sum + val, 0) / bpmEstimates.length;
+        bpmDisplay.textContent = avgBPM.toFixed(1) + " BPM";
+      }
+      lastBeatTime = now;
+    }
+  }
+
+  requestAnimationFrame(detectBeats);
+}
+
+function resetBPM() {
+  bpmEstimates = [];
+  bpmDisplay.textContent = "-- BPM";
+}
+</script>
+
+</body>
+</html>
+
