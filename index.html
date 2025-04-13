@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>FLIPMO BPM Tool</title>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap" rel="stylesheet">
   <style>
@@ -55,7 +55,7 @@
 <script>
 let audioContext, analyser, dataArray, source;
 let lastBeatTime = 0;
-let bpmEstimates = [];
+let beatTimes = [];
 let bpmDisplay = document.getElementById('bpm');
 
 async function startMic() {
@@ -78,18 +78,26 @@ function detectBeats() {
   analyser.getByteFrequencyData(dataArray);
   let energy = dataArray.reduce((sum, val) => sum + val, 0) / dataArray.length;
 
-  if (energy > 40) { // basic threshold for a "beat"
-    let now = audioContext.currentTime;
-    if (now - lastBeatTime > 0.3) { // debounce rapid hits
-      let interval = now - lastBeatTime;
-      let bpm = 60 / interval;
-      if (bpm > 60 && bpm < 180) { // reasonable BPM range
-        bpmEstimates.push(bpm);
-        if (bpmEstimates.length > 10) bpmEstimates.shift();
-        let avgBPM = bpmEstimates.reduce((sum, val) => sum + val, 0) / bpmEstimates.length;
-        bpmDisplay.textContent = avgBPM.toFixed(1) + " BPM";
+  const now = audioContext.currentTime;
+  if (energy > 40 && (now - lastBeatTime) > 0.25) {
+    beatTimes.push(now);
+    lastBeatTime = now;
+
+    if (beatTimes.length >= 4) {
+      const intervals = [];
+      for (let i = 1; i < beatTimes.length; i++) {
+        intervals.push(beatTimes[i] - beatTimes[i - 1]);
       }
-      lastBeatTime = now;
+
+      const avgInterval = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
+      const bpm = 60 / avgInterval;
+
+      if (bpm >= 60 && bpm <= 180) {
+        bpmDisplay.textContent = bpm.toFixed(1) + " BPM";
+      }
+
+      // Keep only last 4 beats for continuous updating
+      if (beatTimes.length > 4) beatTimes.shift();
     }
   }
 
@@ -97,11 +105,12 @@ function detectBeats() {
 }
 
 function resetBPM() {
-  bpmEstimates = [];
+  beatTimes = [];
   bpmDisplay.textContent = "-- BPM";
 }
 </script>
 
 </body>
 </html>
+
 
