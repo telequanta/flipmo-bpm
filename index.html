@@ -1,14 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FLIPMO BPM Tool (Autocorrelation Version)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      background: black;
+      color: #00FF00;
+      font-family: 'Orbitron', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      text-align: center;
+    }
+    h1 {
+      font-size: 2.5em;
+      text-shadow: 0 0 10px #00FF00, 0 0 20px #00FF00;
+      margin-bottom: 30px;
+    }
+    #bpm {
+      font-size: 5em;
+      text-shadow: 0 0 15px #00FF00, 0 0 30px #00FF00;
+      margin: 20px 0;
+    }
+    button {
+      font-family: 'Orbitron', sans-serif;
+      background: none;
+      color: #00FF00;
+      border: 2px solid #00FF00;
+      padding: 10px 20px;
+      margin: 10px;
+      font-size: 1.2em;
+      cursor: pointer;
+      text-shadow: 0 0 8px #00FF00;
+    }
+    button:hover {
+      background: #00FF00;
+      color: black;
+    }
+  </style>
+</head>
+<body>
+
+<h1>FLIPMO BPM Tool</h1>
+<div id="bpm">-- BPM</div>
+<button onclick="startMic()">🎤 Start Mic</button>
+<button onclick="resetBPM()">🔁 Reset</button>
+
 <script>
 let audioContext, analyser, source;
-let dataArray;
-let peakTimes = [];
+let bufferSize = 4096;
+let buffer = [];
 let bpmDisplay = document.getElementById('bpm');
 let bpmTimer;
-const PEAK_THRESHOLD = 5; // Lowered threshold for quieter peaks
-const MIN_PEAK_INTERVAL = 0.35; // Accept faster beats (~170 BPM max)
-const MAX_PEAK_INTERVAL = 0.75; // Accept slower beats (~80 BPM min)
-const EXPECTED_BPM_RANGE = [100, 135];
-let lastPeakTime = 0;
 
 async function startMic() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -16,58 +65,77 @@ async function startMic() {
   source = audioContext.createMediaStreamSource(stream);
 
   analyser = audioContext.createAnalyser();
-  analyser.fftSize = 1024;
-  dataArray = new Uint8Array(analyser.frequencyBinCount);
-
+  analyser.fftSize = bufferSize;
+  analyser.smoothingTimeConstant = 0.8; // Smoother output
   source.connect(analyser);
 
+  buffer = new Float32Array(analyser.fftSize);
   detectBeats();
-  bpmTimer = setInterval(updateBPMDisplay, 2000);
+  bpmTimer = setInterval(estimateBPM, 2000); // Estimate BPM every 2 sec
 }
 
 function detectBeats() {
-  analyser.getByteFrequencyData(dataArray); // Analyze frequency domain
-
-  // Focus on midrange: bins 10–40 (~300Hz–800Hz range)
-  let energy = 0;
-  for (let i = 10; i < 40; i++) {
-    energy += dataArray[i];
-  }
-
-  const currentTime = audioContext.currentTime;
-
-  if (energy > PEAK_THRESHOLD) {
-    let interval = currentTime - lastPeakTime;
-
-    if (interval > MIN_PEAK_INTERVAL && interval < MAX_PEAK_INTERVAL) {
-      peakTimes.push(currentTime);
-      lastPeakTime = currentTime;
-
-      // Keep only the last 40 beats
-      if (peakTimes.length > 40) {
-        peakTimes.shift();
-      }
-    }
-  }
-
+  analyser.getFloatTimeDomainData(buffer);
   requestAnimationFrame(detectBeats);
 }
 
-function updateBPMDisplay() {
-  if (peakTimes.length < 4) {
-    bpmDisplay.textContent = "-- BPM";
-    return;
+function autoCorrelate(buf, sampleRate) {
+  let SIZE = buf.length;
+  let rms = 0;
+  for (let i = 0; i < SIZE; i++) {
+    let val = buf[i];
+    rms += val * val;
+  }
+  rms = Math.sqrt(rms / SIZE);
+  if (rms < 0.01) // volume too low
+    return -1;
+
+  let r1 = 0, r2 = SIZE - 1, threshold = 0.2;
+  for (let i = 0; i < SIZE / 2; i++) {
+    if (Math.abs(buf[i]) < threshold) {
+      r1 = i;
+      break;
+    }
+  }
+  for (let i = 1; i < SIZE / 2; i++) {
+    if (Math.abs(buf[SIZE - i]) < threshold) {
+      r2 = SIZE - i;
+      break;
+    }
   }
 
-  let intervals = [];
-  for (let i = 1; i < peakTimes.length; i++) {
-    intervals.push(peakTimes[i] - peakTimes[i - 1]);
+  buf = buf.slice(r1, r2);
+  SIZE = buf.length;
+
+  let c = new Array(SIZE).fill(0);
+  for (let i = 0; i < SIZE; i++) {
+    for (let j = 0; j < SIZE - i; j++) {
+      c[i] = c[i] + buf[j] * buf[j + i];
+    }
   }
 
-  const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-  let bpm = 60 / avgInterval;
+  let d = 0; while (c[d] > c[d+1]) d++;
+  let maxval = -1, maxpos = -1;
+  for (let i = d; i < SIZE; i++) {
+    if (c[i] > maxval) {
+      maxval = c[i];
+      maxpos = i;
+    }
+  }
 
-  if (bpm >= EXPECTED_BPM_RANGE[0] && bpm <= EXPECTED_BPM_RANGE[1]) {
+  if (maxpos == -1) return -1;
+  let T0 = maxpos;
+
+  let bpm = sampleRate / T0 * 60; // samples to BPM
+  return bpm;
+}
+
+function estimateBPM() {
+  if (!buffer.length) return;
+
+  let bpm = autoCorrelate(buffer, audioContext.sampleRate);
+
+  if (bpm > 100 && bpm < 135) {
     bpmDisplay.textContent = bpm.toFixed(1) + " BPM";
   } else {
     bpmDisplay.textContent = "-- BPM";
@@ -75,8 +143,10 @@ function updateBPMDisplay() {
 }
 
 function resetBPM() {
-  peakTimes = [];
   bpmDisplay.textContent = "-- BPM";
   clearInterval(bpmTimer);
 }
 </script>
+
+</body>
+</html>
